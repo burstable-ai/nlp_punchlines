@@ -1,6 +1,8 @@
+import time
+
 import torch
 from datasets import Dataset
-import numpy as np
+from burst_tools import gpumem
 
 import model_tools as mtools
 
@@ -13,6 +15,12 @@ def init(use_gpu = "AUTOMATIC",
         USE_GPU = torch.cuda.is_available()
     else:
         USE_GPU = use_gpu
+
+    if USE_GPU:
+        try:
+            gpumem.mem()
+        except:
+            raise Exception("no GPU found, aborting init (run with --cpu)")
 
     #-------------------------------------
     # Load the NLP Models
@@ -70,7 +78,8 @@ def get_punchline(input_text, vanilla_gpt2=False, max_tries=None, threshold=None
     best_score = best_punch = -1
     for i in range(max_tries):
         print (f"---------------ITERATION: {i}-----------------")
-        raw_gentext = mtools.generate(gen_mod, gen_tokenizer, prompts, use_gpu=USE_GPU)
+        raw_gentext = mtools.generate(gen_mod, gen_tokenizer, prompts, 
+                                      use_gpu=USE_GPU,leave_on_gpu=True)
         gentext = [x.replace(gen_tokenizer.eos_token,'').replace('\n',' ').strip() for x in raw_gentext]
         punchlines = [x[x.find('Answer:')+len('Answser:'):] for x in gentext]
 
@@ -82,8 +91,9 @@ def get_punchline(input_text, vanilla_gpt2=False, max_tries=None, threshold=None
 
         # Use the classifier to get predictions (1 = real joke, 0 = fake joke) 
         #     and probability of being a "real" joke (from 0.00 to 1.00)
-        preds, probs = mtools.classify_punchlines(tokenized_gentext, class_model, return_prob=True,
-                                                  batch_size=1, use_gpu=USE_GPU)
+        preds, probs = mtools.classify_punchlines(tokenized_gentext, class_model, 
+                                                  return_prob=True, batch_size=1, 
+                                                  use_gpu=USE_GPU, leave_on_gpu=True)
         score = probs[0]
         print(f"Score: {score} Punchline: {punchlines[0]}")
         if score > best_score:
@@ -101,11 +111,17 @@ if __name__ == "__main__":
     if "--cpu" in sys.argv:
         init(use_gpu=False)
     else:
-        init()
+        init(use_gpu=True)
+    print ("USE_GPU:", USE_GPU)
     print ("------------------------------------------------------------------")
     setup = "Why did frogs eat the cheese?"
-
     print ("Q:", setup)
-    punchline = get_punchline(setup)
+    t0 = time.time()
+    punchline = get_punchline(setup, max_tries=3, threshold=10)
+    t1 = time.time() - t0
+    i = punchline.find("Answer:")
+    if i > 0:
+        punchline = punchline[:i]
     print ("A:", punchline)
+    print (f"3 iterations in {t1} seconds ({t1/3} seconds per iteration)")
     print ()

@@ -1,0 +1,1 @@
+https://beta.cloudburst.host/hub/user-redirect/git-pull?repo=https://github.com/burstable-ai/nlp_punchlines&urlpath=lab/tree/nlp_punchlines/FullTutorial.ipynb&branch=full_tut
